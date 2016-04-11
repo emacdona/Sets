@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Data::Dumper;
+my $debug = shift;
+
+my $sets = [];
+my $tree = {};
+my $propertyValues = [];
+my $solutions = {};
+
+LINE: while(<>)
+{
+   chomp;
+   next LINE if(/^\s*$/); #skip empty lines
+
+   #Store sets so that we can examine them in pairs to see if a solution exists
+   storeSet($_);
+
+   #Index the set so solutions are easy to lookup
+   indexSet($_);
+}
+
+#for each pair of sets, see if a third exists that solves the problem
+foreach my $pair ( @{orderAgnosticPairs(0, scalar @{ $sets })} ) {
+   recordSolutionIfExists( $pair );
+}
+
+for my $solution (keys %$solutions){
+   print "Solution:\n";
+   print "   ";
+   print join("\n   ", split(/\s*;\s*/, $solution));
+   print "\n\n";
+}
+
+if($debug){
+   print "\nSets Data Structure:\n";
+   print Dumper $sets;
+   print "\nProperty Values Data Structure:\n";
+   print Dumper $propertyValues;
+   print "\nIndex Data Structure:\n";
+   print Dumper $tree;
+   print "\nSolutions Data Structure:\n";
+   print Dumper $solutions;
+}
+
+sub storeSet {
+   my $line = shift;
+   my @values = split /\s*,\s*/, $line;
+
+   my $i=0;
+
+   #record valid values for each property
+   foreach my $value (@values){
+      $propertyValues->[$i]->{$value} += 1;
+      $i++;
+   }
+   push @$sets, \@values;
+}
+
+sub indexSet{
+   my $line = shift;
+   my $treeWalker = $tree;
+   foreach my $property (split /\s*,\s*/, $line) {
+      if(not exists $treeWalker->{$property} ){
+         $treeWalker->{$property} = {};
+      }
+      $treeWalker = $treeWalker->{$property};
+   }
+}
+
+sub orderAgnosticPairs{
+   my ($start, $length) = @_;
+   my $cp = [];
+   my $jstart = $start;
+
+   for(my $i=$start; $i < $length; $i++){
+      for(my $j=$jstart++; $j < $length; $j++){
+         if($i != $j){
+            push @$cp, [$i, $j]
+         }
+      }
+   }
+
+   return $cp;
+}
+
+sub equalVectors {
+   my ($v1, $v2) = @_;
+
+   my $equal = 1;
+
+   for( my $i = 0; $i < scalar(@$v1); $i++ ){
+      $equal = $equal && ( $v1->[$i] eq $v2->[$i] );
+   }
+
+   return $equal;
+}
+
+sub recordSolutionIfExists {
+   my $startingPair = shift;
+
+   my $set1 = $sets->[$startingPair->[0]];
+   my $set2 = $sets->[$startingPair->[1]];
+
+   my $coordinates = [];
+
+   for( my $i = 0; $i < scalar @{ $set1 }; $i++ ){
+      my $val1 = $set1->[$i];
+      my $val2 = $set2->[$i];
+
+      if( $val1 eq $val2 ){
+         push @$coordinates, $val1;
+      }
+      else{
+         push @$coordinates, (grep { $_ ne $val1 && $_ ne $val2} keys(%{$propertyValues->[$i]}))[0];
+      }
+   }
+
+   my $treeWalker = $tree;
+   foreach my $coordinate (@$coordinates){
+      if( not exists $treeWalker->{$coordinate} )
+      {
+         return;
+      }
+      $treeWalker = $treeWalker->{$coordinate};
+   }
+
+   if( equalVectors( $set1, $coordinates) || equalVectors( $set2, $coordinates ) ) {
+      return;
+   }
+
+   #Hacky way to get rid of duplicates, but hey, this whole program is hacky :-P
+   $solutions->{ join(";", sort(join(",", @$set1), join(",", @$set2), join(",", @$coordinates))) }++;
+}
